@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Smart Attendance Report</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            background-color: #f0f2f5; 
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 { 
+            color: #007bff; 
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        p.log-status {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 25px; 
+            font-size: 0.95em;
+        }
+        th, td { 
+            padding: 12px 15px; 
+            text-align: left; 
+            border-bottom: 1px solid #e9ecef; 
+        }
+        th { 
+            background-color: #007bff; 
+            color: white; 
+            font-weight: 600;
+        }
+        tr:nth-child(even) { 
+            background-color: #f8f9fa; 
+        }
+        tr:hover {
+            background-color: #e2f0ff;
+        }
+        .checked-in { 
+            color: #28a745; /* Green */
+            font-weight: bold; 
+        }
+        .checked-out { 
+            color: #dc3545; /* Red */
+            font-weight: bold; 
+        }
+        .unknown { 
+            color: #ffc107; /* Yellow */
+            font-weight: bold; 
+        }
+        .footer {
+            margin-top: 40px;
+            font-size: 0.75em;
+            text-align: right;
+            color: #adb5bd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Smart Attendance Report Dashboard 📊</h1>
+        <p class="log-status">Displays all recorded Check-In and Check-Out events from the system log (Attendance_Log.csv).</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Date</th>
+                    <th>Check-In Time</th>
+                    <th>Check-Out Time</th>
+                    <th>Total Work Time</th> <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in attendance_records %}
+                <tr>
+                    <td>{{ record.Name }}</td>
+                    <td>{{ record.Date }}</td>
+                    <td>{{ record.Check_In_Time }}</td>
+                    <td>{{ record.Check_Out_Time }}</td>
+                    
+                    <td>
+                        <strong>{{ record.Total_Work_Time }}</strong>
+                    </td>
+                    
+                    <td>
+                        <span class="
+                            {% if record.Status == 'Checked In' %}checked-in
+                            {% elif record.Status == 'Checked Out' %}checked-out
+                            {% elif record.Status == 'Unknown' %}unknown
+                            {% endif %}">
+                            {{ record.Status }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="footer">
+            Report generated at {{ current_time }} (Server Time).
+        </div>
+    </div>
+</body>
+</html>
