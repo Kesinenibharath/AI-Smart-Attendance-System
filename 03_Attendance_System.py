@@ -10,8 +10,8 @@ import sys
 # --- Configuration ---
 ENCODING_FILE = "face_encodings.pkl" 
 LOG_FILE = "Attendance_Log.csv"      
-COOLDOWN_SECONDS = 5          # Time to wait before logging the same event again
-MINIMUM_GAP_HOURS = 2         # Minimum time gap required for check-out (2 hours)
+COOLDOWN_SECONDS = 5          # Time to wait before logging the same event again (to stop duplicates)
+MINIMUM_GAP_HOURS = 2         # Minimum time gap required for check-out (business logic)
 
 # Dictionary to track the last time a name was logged/updated
 last_log_time = {} 
@@ -27,11 +27,17 @@ except FileNotFoundError:
     print(f"ERROR: {ENCODING_FILE} not found. Please run 02_Encode_Faces.py first.")
     sys.exit()
 
-# --- 2. Attendance Logging Function (FINAL VERSION) ---
+# --- 2. Attendance Logging Function ---
 def mark_attendance(name):
     """
     Handles Check-In and Check-Out with Cooldown and Minimum Gap constraints.
     """
+    # --- CRITICAL FIX: DO NOT LOG UNKNOWN FACES ---
+    if name == "Unknown":
+        # print("👤 Unknown face detected. Skipping attendance log.")
+        return
+    # ---------------------------------------------
+    
     now = datetime.now()
     today_date = now.strftime("%Y-%m-%d")
     current_time_str = now.strftime("%H:%M:%S")
@@ -49,7 +55,7 @@ def mark_attendance(name):
             writer = csv.writer(f)
             writer.writerow(['Name', 'Date', 'Check_In_Time', 'Check_Out_Time', 'Status']) 
             
-    # 1. Read the existing data
+    # 1. Read existing data
     with open(LOG_FILE, 'r') as f:
         reader = csv.reader(f)
         data_list = list(reader)
@@ -72,25 +78,21 @@ def mark_attendance(name):
             required_gap = timedelta(hours=MINIMUM_GAP_HOURS)
             
             if time_difference >= required_gap:
-                # Condition met: Perform the Check-Out update
                 row[3] = current_time_str
                 row[4] = 'Checked Out'
                 print(f"ATTENDANCE UPDATED (CHECK-OUT): {name} at {current_time_str}. Gap met!")
                 record_updated = True
             else:
-                # Condition NOT met: Print message and skip update
                 print(f"⚠️ Check-Out skipped for {name}: Must wait {MINIMUM_GAP_HOURS}h since check-in. Elapsed: {str(time_difference).split('.')[0]}")
-            # --- END 2-HOUR GAP LOGIC ---
             
         new_records.append(row)
 
     # 3. If no record was updated (i.e., First Check-In of the day OR Check-Out failed the gap rule)
     if not record_updated:
-        # Check if a Check-In already exists for today (we should only create a new record if NO record exists)
         already_checked_in = any(row[0] == name and row[1] == today_date for row in records)
         
         if not already_checked_in:
-            # Create a new Check-In record: Name, Date, Check-In, Check-Out (empty), Status
+            # Create a new Check-In record
             new_records.append([name, today_date, current_time_str, '', 'Checked In'])
             print(f"ATTENDANCE MARKED (CHECK-IN): {name} at {current_time_str}")
 
@@ -101,22 +103,25 @@ def mark_attendance(name):
             writer.writerow(header)
         writer.writerows(new_records)
         
-    # Reset the cooldown timer after a successful attempt (log or skip due to gap)
     last_log_time[name] = now
 
 
 # --- 3. Real-Time Recognition Loop ---
-video_capture = cv2.VideoCapture(0) # Index 0. If this fails, try 1 or 2.
+video_capture = cv2.VideoCapture(0) 
 
 # **CRITICAL FIX: CHECK IF CAMERA OPENED**
 if not video_capture.isOpened():
-    print("FATAL ERROR: Could not open camera. Check if another application is using it, or try index 1.")
+    print("FATAL ERROR: Could not open camera. Check if another application is using it, or try index 1 in the code.")
     sys.exit()
 
 face_locations = []
 face_encodings = []
 face_names = []
 process_this_frame = True 
+
+# --- CRITICAL FIX: STRICTER MATCHING THRESHOLD ---
+# Default was 0.6, previously lowered to 0.5. Now tightened to 0.4.
+STRICT_TOLERANCE = 0.4 
 
 print("\n--- Starting Real-Time Attendance System. Press 'q' to quit. ---")
 
@@ -134,15 +139,23 @@ while True:
 
         face_names = []
         for face_encoding in face_encodings:
-            matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
-            name = "Unknown"
-
+            
+            # Find the best match (minimum distance) among known faces
             face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
             best_match_index = np.argmin(face_distances)
             
-            if matches[best_match_index]:
+            best_match_distance = face_distances[best_match_index]
+
+            name = "Unknown"
+            
+            # Assign name ONLY if the closest distance is BELOW the STRICT_TOLERANCE
+            if best_match_distance < STRICT_TOLERANCE:
                 name = known_face_names[best_match_index]
-                mark_attendance(name)
+            # else:
+                # If you want to debug, uncomment this line:
+                # print(f"Closest match distance: {best_match_distance:.2f}. Failed tolerance check.")
+                
+            mark_attendance(name) # Check if name is "Unknown" inside the function
 
             face_names.append(name)
 
@@ -155,12 +168,12 @@ while True:
         bottom *= 4
         left *= 4
 
-        color = (0, 255, 0) # Default green
+        color = (0, 255, 0) # Default green for recognized
         if name == "Unknown":
             color = (0, 0, 255) # Red for Unknown
         elif name in last_log_time:
-            # Simple visual feedback to show recognition is working
-            color = (255, 165, 0) # Orange if currently in cooldown
+            # Simple visual feedback to show logging has been processed/cooldown active
+            color = (255, 165, 0) 
 
         cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
         cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
